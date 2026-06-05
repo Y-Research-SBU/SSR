@@ -1,0 +1,15 @@
+# Training deps (pip fallback, CUDA 12.8 driver)
+# Prefer: ./install_env_cu128.sh  or  uv sync --extra data
+#
+# pip example (PyTorch cu128 index):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+#   pip install pylate>=1.5.0
+#   pip install -r requirements-train.txt
+
+pylate>=1.5.0
+datasets>=2.20.0
+accelerate>=0.31.0
+safetensors>=0.4.0
+wandb>=0.18.0
+sentence-transformers==5.3.0
+transformers>=4.41.0,<=5.3.0

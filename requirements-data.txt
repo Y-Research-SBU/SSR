@@ -1,0 +1,6 @@
+# Data prep (prepare_msmarco.py, prepare_mteb_eval.py)
+bm25s>=0.2.0
+PyStemmer>=2.2.0
+tqdm>=4.66.0
+datasets>=2.14.0
+mteb>=2.0.0
