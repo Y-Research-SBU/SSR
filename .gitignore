@@ -1,10 +1,4 @@
-# Docs & shell helpers (upload code first; add these later)
-*.md
-/scripts/
 *.sh
-
-# PyLate: install from PyPI (pip install pylate>=1.5.0), do not vendor
-/pylate/
 
 # Python
 .venv/
