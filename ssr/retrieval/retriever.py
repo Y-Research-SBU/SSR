@@ -14,11 +14,7 @@ from tqdm import tqdm
 
 from .inverted_index import build_chunk_index, coarse_maxsim_via_index
 from .maxsim import maxsim_query_vs_documents
-from .sparse_repr import (
-    SparseTokenEmbeddings,
-    batch_dense_to_sparse,
-    dense_tokens_to_sparse,
-)
+from .sparse_repr import SparseTokenEmbeddings, batch_dense_to_sparse, dense_tokens_to_sparse
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +76,7 @@ class SparseMaxSimRetriever:
         *,
         n_latents: int,
         device: str,
+        cls_encoder=None,
         show_progress: bool = True,
     ) -> List[SparseTokenEmbeddings]:
         cfg = self.config
@@ -94,6 +91,20 @@ class SparseMaxSimRetriever:
             )
         for start in iterator:
             batch = list(queries[start : start + cfg.encode_batch_size])
+            k_final = cfg.final_topk or getattr(
+                getattr(model, "sae_module", None), "topk", 32
+            )
+            if cls_encoder is not None:
+                out.extend(
+                    cls_encoder.encode_with_token_sae(
+                        model,
+                        batch,
+                        is_query=True,
+                        token_n_latents=n_latents,
+                        token_topk=k_final,
+                    )
+                )
+                continue
             embs = model.encode(
                 batch,
                 batch_size=len(batch),
@@ -104,9 +115,6 @@ class SparseMaxSimRetriever:
             )
             if not isinstance(embs, list):
                 embs = [embs]
-            k_final = cfg.final_topk or getattr(
-                getattr(model, "sae_module", None), "topk", 32
-            )
             sparse_batch = batch_dense_to_sparse(
                 embs,
                 n_latents=n_latents,
@@ -122,6 +130,7 @@ class SparseMaxSimRetriever:
         *,
         n_latents: int,
         device: str,
+        cls_encoder=None,
         show_progress: bool = True,
     ) -> List[SparseTokenEmbeddings]:
         cfg = self.config
@@ -139,6 +148,17 @@ class SparseMaxSimRetriever:
         )
         for start in iterator:
             batch = list(corpus[start : start + cfg.encode_batch_size])
+            if cls_encoder is not None:
+                out.extend(
+                    cls_encoder.encode_with_token_sae(
+                        model,
+                        batch,
+                        is_query=False,
+                        token_n_latents=n_latents,
+                        token_topk=k_final,
+                    )
+                )
+                continue
             embs = model.encode(
                 batch,
                 batch_size=1,
@@ -149,13 +169,12 @@ class SparseMaxSimRetriever:
             )
             if not isinstance(embs, list):
                 embs = [embs]
-            out.extend(
-                batch_dense_to_sparse(
-                    embs,
-                    n_latents=n_latents,
-                    topk=k_final,
-                )
+            sparse_batch = batch_dense_to_sparse(
+                embs,
+                n_latents=n_latents,
+                topk=k_final,
             )
+            out.extend(sparse_batch)
         return out
 
     def retrieve(

@@ -34,8 +34,17 @@ def encode_corpus_batch(
     n_latents: int,
     topk: int,
     device: str,
+    cls_encoder=None,
 ) -> list[SparseTokenEmbeddings]:
     """Run SSR document encoding on GPU; return CPU sparse rows."""
+    if cls_encoder is not None:
+        return cls_encoder.encode_with_token_sae(
+            model,
+            texts,
+            is_query=False,
+            token_n_latents=n_latents,
+            token_topk=topk,
+        )
     with torch.inference_mode():
         embs = model.encode(
             list(texts),
@@ -66,6 +75,7 @@ def build_global_index_streaming(
     show_progress: bool = True,
     total_docs: int | None = None,
     empty_cache_every: int = 0,
+    cls_encoder=None,
 ) -> tuple[BlockInvertedIndex, np.ndarray, GlobalIndexBuildStats, DocIdMap]:
     """Encode corpus batches on GPU and merge postings on CPU.
 
@@ -95,9 +105,14 @@ def build_global_index_streaming(
         sparse_docs = encode_corpus_batch(
             model,
             texts,
-            n_latents=n_latents,
+            n_latents=(
+                int(n_latents) - int(cls_encoder.n_latents)
+                if cls_encoder is not None
+                else int(n_latents)
+            ),
             topk=topk,
             device=encode_device,
+            cls_encoder=cls_encoder,
         )
         del texts
 
@@ -149,11 +164,17 @@ def build_mteb_corpus_index_e2e(
     max_docs: int = 0,
     show_progress: bool = True,
     empty_cache_every: int = 4,
+    cls_encoder=None,
+    cls_sae_path: Path | None = None,
+    cls_topk: int | None = None,
 ) -> tuple[Path, DocIdMap, GlobalIndexBuildStats]:
     """Stream ``corpus.jsonl`` → encode on GPU → CPU index → save cache + doc_id_map."""
     doc_tokens = int(getattr(model, "document_length", None) or 180)
     n_latents = int(model.sae_module.n_latents)
     topk = int(model.sae_module.topk)
+    if cls_encoder is not None:
+        doc_tokens += 1
+        n_latents += int(cls_encoder.n_latents)
 
     total_docs = None
     if max_docs <= 0:
@@ -181,6 +202,7 @@ def build_mteb_corpus_index_e2e(
         show_progress=show_progress,
         total_docs=effective_total,
         empty_cache_every=empty_cache_every,
+        cls_encoder=cls_encoder,
     )
 
     slug_root = corpus_path.parent
@@ -198,6 +220,8 @@ def build_mteb_corpus_index_e2e(
         doc_tokens=doc_tokens,
         n_latents=n_latents,
         topk=topk,
+        cls_sae_path=cls_sae_path,
+        cls_topk=cls_topk,
     )
     save_global_index_cache(
         artifact,
@@ -233,6 +257,8 @@ def load_mteb_e2e_index(
     block_size: int = 512,
     reorder_mode: str = "frequency",
     show_progress: bool = True,
+    cls_sae_path: Path | None = None,
+    cls_topk: int | None = None,
 ) -> tuple[BlockInvertedIndex, np.ndarray, GlobalIndexBuildStats, DocIdMap] | None:
     """Load index + doc id map written by :func:`build_mteb_corpus_index_e2e`."""
     from .global_index_cache import load_global_index_cache
@@ -250,6 +276,8 @@ def load_mteb_e2e_index(
         doc_tokens=doc_tokens,
         n_latents=n_latents,
         topk=topk,
+        cls_sae_path=cls_sae_path,
+        cls_topk=cls_topk,
     )
     id_map_path = artifact / "doc_id_map.json"
     if not id_map_path.is_file():

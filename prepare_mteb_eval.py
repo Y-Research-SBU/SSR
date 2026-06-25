@@ -229,7 +229,7 @@ def parse_args() -> argparse.Namespace:
         "--processed-dir",
         type=Path,
         default=Path("./data/processed/mteb"),
-        help="Processed data root (default: ./data/processed/mteb)"),
+        help="Processed data root (default: ./data/processed/mteb)",
     )
     parser.add_argument(
         "--datasets",
@@ -243,7 +243,7 @@ def parse_args() -> argparse.Namespace:
         "--split",
         nargs="+",
         default=list(DEFAULT_SPLITS),
-        help="Split name to write (default: test; must be in task eval_splits)"),
+        help="Split name to write (default: test; must be in task eval_splits)",
     )
     parser.add_argument(
         "-v", "--verbose",

@@ -33,7 +33,8 @@ def resolve_training_device(args: Namespace) -> str:
             return "cuda"
         raise RuntimeError(
             "CUDA was requested (--gpu / --device cuda) but torch.cuda.is_available() is False. "
-            "Check driver/CUDA 12.8 PyTorch install (./install_env_cu128.sh)."
+            "Check the driver and install PyTorch from the CUDA 12.8 index configured in pyproject.toml "
+            "(for example: uv sync --extra data --extra eval)."
         )
     if args.device:
         return args.device

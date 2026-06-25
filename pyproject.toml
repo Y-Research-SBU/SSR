@@ -10,6 +10,8 @@ dependencies = [
     "accelerate>=0.31.0",
     "safetensors>=0.4.0",
     "wandb>=0.18.0",
+    "sentence-transformers==5.3.0",
+    "transformers>=4.41.0,<=5.3.0",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +22,7 @@ data = [
     "bm25s>=0.2.0",
     "PyStemmer>=2.2.0",
     "tqdm>=4.66.0",
+    "mteb>=2.0.0",
 ]
 
 [tool.uv]

@@ -232,6 +232,9 @@ class SSR(ColBERT):
         if not self.do_query_expansion:
             self.attend_to_expansion_tokens = False
 
+        if getattr(self.sae_module, "cls_token_id", None) is None:
+            self.sae_module.cls_token_id = self.tokenizer.cls_token_id
+
 
 def build_ssr(
     model_name_or_path: str,
@@ -242,6 +245,7 @@ def build_ssr(
     auxk: int = 512,
     normalize: bool = False,
     dead_threshold: int = 30,
+    token_scope: str = "all",
     **colbert_kwargs,
 ) -> SSR:
     """Build an SSR model (ColBERT backbone + Sparse Autoencoder projector)."""
@@ -253,6 +257,7 @@ def build_ssr(
             "auxk": auxk,
             "normalize": normalize,
             "dead_threshold": dead_threshold,
+            "token_scope": token_scope,
         },
         **colbert_kwargs,
     )

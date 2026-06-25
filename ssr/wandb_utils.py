@@ -59,6 +59,7 @@ def _collect_hyperparameters(
         "auxk": args.auxk,
         "dead_threshold": args.dead_threshold,
         "normalize_input": args.normalize_input,
+        "sae_token_scope": getattr(args, "sae_token_scope", "non-cls"),
         "recon_coef": args.recon_coef,
         "auxk_coef": args.auxk_coef,
         "ucl_coef": args.ucl_coef,

@@ -22,6 +22,7 @@ from prepare_mteb_eval import MTEB_EVAL_DATASETS  # noqa: E402
 from ssr.model import SSR  # noqa: E402
 
 from .device_utils import describe_hardware, resolve_encode_device, resolve_score_device
+from .cls_sae import CLSSparseEncoder
 from .exact_retriever import ExactSparseMaxSimRetriever
 from .timing_stats import RetrievalTimingStats
 from .mteb_io import iter_dataset_slugs, load_mteb_split
@@ -58,6 +59,88 @@ def load_ssr(model_path: Path, device: str) -> SSR:
     return model
 
 
+def cache_suffix(model, cls_encoder: CLSSparseEncoder | None = None) -> str:
+    token_part = f"{int(model.sae_module.topk)}k"
+    if cls_encoder is None:
+        return token_part
+    return f"{token_part}_cls{int(cls_encoder.topk)}k"
+
+
+def load_cls_encoder_from_args(
+    args: argparse.Namespace,
+    *,
+    device: str,
+) -> CLSSparseEncoder | None:
+    if args.cls_sae_path is None:
+        return None
+    cls_encoder = CLSSparseEncoder.from_path(
+        args.cls_sae_path,
+        device=device,
+        topk=args.cls_topk,
+    )
+    logger.info(
+        "Loaded CLS SAE: %s (n_latents=%d, topk=%d)",
+        args.cls_sae_path,
+        cls_encoder.n_latents,
+        cls_encoder.topk,
+    )
+    return cls_encoder
+
+
+def is_msmarco_slug(slug: str) -> bool:
+    normalized = slug.lower().replace("_", "-")
+    return normalized in {"msmarco", "msmarco-passage", "ms-marco", "ms-marco-passage"}
+
+
+def metrics_for_dataset(args: argparse.Namespace, slug: str) -> RetrievalMetrics:
+    default_mrr = [10] if is_msmarco_slug(slug) else []
+    default_ndcg = [] if is_msmarco_slug(slug) else [10]
+    return RetrievalMetrics(
+        accuracy_at_k=tuple(sorted(set(args.recall_k))),
+        precision_recall_at_k=tuple(sorted(set(args.recall_k))),
+        mrr_at_k=tuple(args.mrr_k if args.mrr_k is not None else default_mrr),
+        ndcg_at_k=tuple(args.ndcg_k if args.ndcg_k is not None else default_ndcg),
+        map_at_k=tuple(args.map_k),
+    )
+
+
+def apply_variant_defaults(args: argparse.Namespace) -> None:
+    """Map public method names to the lower-level retrieval flags."""
+    if args.variant is None:
+        return
+    variant = args.variant.lower()
+    if variant == "ssr":
+        args.mode = "exact"
+        args.index_two_phase = False
+        if args.cls_sae_path is not None:
+            raise ValueError("--variant ssr is token-only; drop --cls-sae-path or use ssr-cls")
+    elif variant == "ssr-cls":
+        args.mode = "exact"
+        args.index_two_phase = False
+        if args.cls_sae_path is None:
+            raise ValueError("--variant ssr-cls requires --cls-sae-path")
+    elif variant == "ssr++":
+        if args.corpus_backend == "e2e-index":
+            args.mode = "exact"
+            args.index_two_phase = True
+        else:
+            args.mode = "pruned"
+    else:
+        raise ValueError(f"Unknown --variant: {args.variant}")
+
+
+def method_name(args: argparse.Namespace) -> str:
+    if args.cls_sae_path is not None and (
+        args.mode == "pruned" or getattr(args, "index_two_phase", False)
+    ):
+        return "SSR-CLS++"
+    if args.cls_sae_path is not None:
+        return "SSR-CLS"
+    if args.mode == "pruned" or getattr(args, "index_two_phase", False):
+        return "SSR++"
+    return "SSR"
+
+
 def encode_corpus_with_cache(
     model,
     split,
@@ -65,6 +148,7 @@ def encode_corpus_with_cache(
     cache_path: Path | None,
     retriever,
     force_reencode: bool,
+    cls_encoder: CLSSparseEncoder | None = None,
 ):
     n_latents = model.sae_module.n_latents
     if cache_path and cache_path.is_file() and not force_reencode:
@@ -85,6 +169,7 @@ def encode_corpus_with_cache(
         split.corpus_texts,
         n_latents=n_latents,
         device=str(next(model.parameters()).device),
+        cls_encoder=cls_encoder,
     )
     if cache_path:
         save_sparse_corpus(cache_path, split.corpus_ids, sparse)
@@ -103,6 +188,7 @@ def evaluate_split(
     cache_dir: Path | None,
     force_reencode: bool,
     top_k: int,
+    cls_encoder: CLSSparseEncoder | None = None,
 ) -> Dict[str, float]:
     n_latents = model.sae_module.n_latents
     k_final = model.sae_module.topk
@@ -113,7 +199,7 @@ def evaluate_split(
         cache_path = (
             cache_dir
             / split.slug
-            / f"corpus_{k_final}k_{split.split}.npz"
+            / f"corpus_{cache_suffix(model, cls_encoder)}_{split.split}.npz"
         )
 
     corpus_sparse = encode_corpus_with_cache(
@@ -122,6 +208,7 @@ def evaluate_split(
         cache_path=cache_path,
         retriever=retriever,
         force_reencode=force_reencode,
+        cls_encoder=cls_encoder,
     )
 
     logger.info("Encoding queries (%d) ...", len(split.query_texts))
@@ -130,6 +217,7 @@ def evaluate_split(
         split.query_texts,
         n_latents=n_latents,
         device=encode_device,
+        cls_encoder=cls_encoder,
     )
 
     retrieval_timing: RetrievalTimingStats | None = None
@@ -178,12 +266,13 @@ def cache_corpus_embeddings_only(
     retriever,
     cache_dir: Path,
     force_reencode: bool,
+    cls_encoder: CLSSparseEncoder | None = None,
 ) -> Dict[str, Any]:
     """Encode and save corpus sparse embeddings to ``cache_dir`` (no query retrieval)."""
     cache_path = (
         cache_dir
         / split.slug
-        / f"corpus_{model.sae_module.topk}k_{split.split}.npz"
+        / f"corpus_{cache_suffix(model, cls_encoder)}_{split.split}.npz"
     )
     encode_corpus_with_cache(
         model,
@@ -191,11 +280,13 @@ def cache_corpus_embeddings_only(
         cache_path=cache_path,
         retriever=retriever,
         force_reencode=force_reencode,
+        cls_encoder=cls_encoder,
     )
     return {
         "cache_path": str(cache_path),
         "n_docs": len(split.corpus_ids),
         "topk": int(model.sae_module.topk),
+        "cls_topk": int(cls_encoder.topk) if cls_encoder is not None else None,
     }
 
 
@@ -213,11 +304,17 @@ def evaluate_split_e2e(
     top_k: int,
     block_size: int,
     latent_reorder: str,
+    cls_encoder: CLSSparseEncoder | None = None,
+    cls_sae_path: Path | None = None,
 ) -> Dict[str, float]:
     """MTEB IR metrics using a pre-built E2E global index (queries encoded only)."""
-    n_latents = model.sae_module.n_latents
+    token_n_latents = model.sae_module.n_latents
+    index_n_latents = token_n_latents
     k_final = model.sae_module.topk
     doc_tokens = int(getattr(model, "document_length", None) or 180)
+    if cls_encoder is not None:
+        index_n_latents += int(cls_encoder.n_latents)
+        doc_tokens += 1
     retriever.config.final_topk = k_final
 
     corpus_path = data_dir / split.slug / "corpus.jsonl"
@@ -229,11 +326,13 @@ def evaluate_split_e2e(
         corpus_path=corpus_path,
         model_path=model_path,
         doc_tokens=doc_tokens,
-        n_latents=n_latents,
+        n_latents=index_n_latents,
         topk=k_final,
         block_size=block_size,
         reorder_mode=latent_reorder,
         show_progress=True,
+        cls_sae_path=cls_sae_path,
+        cls_topk=cls_encoder.topk if cls_encoder is not None else None,
     )
     if loaded is None:
         raise FileNotFoundError(
@@ -259,8 +358,9 @@ def evaluate_split_e2e(
     queries_sparse = retriever.encode_queries(
         model,
         split.query_texts,
-        n_latents=n_latents,
+        n_latents=token_n_latents,
         device=encode_device,
+        cls_encoder=cls_encoder,
     )
 
     ranked = retriever.retrieve_from_e2e_index(
@@ -287,6 +387,7 @@ def evaluate_split_e2e(
 
 def run_mteb_index_build(args: argparse.Namespace) -> Dict[str, Any]:
     """Stream-build global inverted indexes for MTEB corpora (no sparse bank on disk)."""
+    apply_variant_defaults(args)
     if args.model_path is None:
         raise ValueError("--model-path is required for --task index")
 
@@ -300,6 +401,8 @@ def run_mteb_index_build(args: argparse.Namespace) -> Dict[str, Any]:
         )
     )
     model = load_ssr(model_path, encode_device)
+    cls_encoder = load_cls_encoder_from_args(args, device=encode_device)
+    logger.info("Index variant: %s", method_name(args))
 
     data_dir = args.data_dir.resolve()
     slugs = _resolve_dataset_slugs(args, data_dir)
@@ -320,16 +423,22 @@ def run_mteb_index_build(args: argparse.Namespace) -> Dict[str, Any]:
         )
         if not args.force_rebuild_index:
             doc_tokens = int(getattr(model, "document_length", None) or 180)
+            n_latents = int(model.sae_module.n_latents)
+            if cls_encoder is not None:
+                doc_tokens += 1
+                n_latents += int(cls_encoder.n_latents)
             existing = load_mteb_e2e_index(
                 index_cache_dir=per_slug_cache,
                 corpus_path=corpus_path,
                 model_path=model_path,
                 doc_tokens=doc_tokens,
-                n_latents=model.sae_module.n_latents,
+                n_latents=n_latents,
                 topk=model.sae_module.topk,
                 block_size=args.block_size,
                 reorder_mode=args.latent_reorder,
                 show_progress=False,
+                cls_sae_path=args.cls_sae_path,
+                cls_topk=cls_encoder.topk if cls_encoder is not None else None,
             )
             if existing is not None:
                 _index, _remap, stats, id_map = existing
@@ -359,6 +468,9 @@ def run_mteb_index_build(args: argparse.Namespace) -> Dict[str, Any]:
             encode_batch_size=args.encode_batch_size,
             max_docs=args.max_corpus or 0,
             empty_cache_every=args.empty_cache_every,
+            cls_encoder=cls_encoder,
+            cls_sae_path=args.cls_sae_path,
+            cls_topk=cls_encoder.topk if cls_encoder is not None else None,
         )
         results[slug] = {
             "skipped": False,
@@ -432,6 +544,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="index: stream corpus→encode→global index; retrieval: score queries (default).",
     )
     parser.add_argument(
+        "--variant",
+        choices=("ssr", "ssr-cls", "ssr++"),
+        default=None,
+        help=(
+            "Public method preset: ssr=token-only exact, ssr-cls=token+[CLS] exact "
+            "(requires --cls-sae-path), ssr++=pruned/two-phase retrieval."
+        ),
+    )
+    parser.add_argument(
         "--corpus-backend",
         choices=("sparse-cache", "e2e-index"),
         default="sparse-cache",
@@ -444,7 +565,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--dataset",
         type=str,
         default=None,
-        choices=all_slugs,
         metavar="DATASET",
         help="Single dataset slug (alternative to one entry in --datasets).",
     )
@@ -463,7 +583,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--datasets",
         nargs="+",
-        choices=all_slugs,
         default=None,
         metavar="DATASET",
         help=f"Dataset slugs to evaluate (default: all under data-dir).",
@@ -565,7 +684,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--ndcg-k",
         type=int,
         nargs="+",
-        default=[10],
+        default=None,
+        help="nDCG cutoffs. Default: [10] for non-MSMARCO datasets, disabled for MSMARCO.",
     )
     parser.add_argument(
         "--recall-k",
@@ -577,7 +697,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--mrr-k",
         type=int,
         nargs="+",
-        default=[10],
+        default=None,
+        help="MRR cutoffs. Default: [10] for MSMARCO datasets, disabled otherwise.",
     )
     parser.add_argument(
         "--map-k",
@@ -628,6 +749,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Cap query latents per token (0=all; lossy if too small).",
     )
     parser.add_argument("--gpu-hot-budget-gb", type=float, default=8.0)
+    parser.add_argument(
+        "--cls-sae-path",
+        type=Path,
+        default=None,
+        help="Optional separate SAE checkpoint for [CLS] embeddings during retrieval/indexing.",
+    )
+    parser.add_argument(
+        "--cls-topk",
+        type=int,
+        default=None,
+        help="Top-K for --cls-sae-path (default: CLS SAE checkpoint topk).",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser.parse_args(argv)
 
@@ -645,6 +778,8 @@ def run_mteb_eval(args: argparse.Namespace) -> Dict[str, Any]:
 
     if args.model_path is None:
         raise ValueError("--model-path is required")
+
+    apply_variant_defaults(args)
 
     if args.task == "index":
         return run_mteb_index_build(args)
@@ -677,16 +812,9 @@ def run_mteb_eval(args: argparse.Namespace) -> Dict[str, Any]:
 
     model_path = resolve_model_checkpoint(args.model_path)
     model = load_ssr(model_path, encode_device)
+    cls_encoder = load_cls_encoder_from_args(args, device=encode_device)
     retriever = build_retriever(_retriever_config_from_args(args, score_backend))
-
-    metrics = RetrievalMetrics(
-        accuracy_at_k=tuple(sorted(set(args.recall_k))),
-        precision_recall_at_k=tuple(sorted(set(args.recall_k))),
-        mrr_at_k=tuple(args.mrr_k),
-        ndcg_at_k=tuple(args.ndcg_k),
-        map_at_k=tuple(args.map_k),
-    )
-    eval_top_k = max(metrics.all_k(), args.top_k)
+    logger.info("Evaluation variant: %s", method_name(args))
 
     data_dir = args.data_dir.resolve()
     slugs = _resolve_dataset_slugs(args, data_dir)
@@ -700,6 +828,14 @@ def run_mteb_eval(args: argparse.Namespace) -> Dict[str, Any]:
 
     for slug in slugs:
         logger.info("=== Evaluating %s (%s) ===", slug, MTEB_EVAL_DATASETS.get(slug, slug))
+        metrics = metrics_for_dataset(args, slug)
+        eval_top_k = max(metrics.all_k(), args.top_k)
+        logger.info(
+            "Metrics for %s: mrr@%s ndcg@%s",
+            slug,
+            list(metrics.mrr_at_k),
+            list(metrics.ndcg_at_k),
+        )
         split = load_mteb_split(data_dir, slug, args.split)
         if args.max_corpus:
             split = type(split)(
@@ -731,6 +867,7 @@ def run_mteb_eval(args: argparse.Namespace) -> Dict[str, Any]:
                 retriever=retriever,
                 cache_dir=cache_dir,
                 force_reencode=args.force_reencode,
+                cls_encoder=cls_encoder,
             )
             all_results[slug] = info
             logger.info("Cached corpus embeddings: %s", info["cache_path"])
@@ -754,6 +891,8 @@ def run_mteb_eval(args: argparse.Namespace) -> Dict[str, Any]:
                 top_k=eval_top_k,
                 block_size=args.block_size,
                 latent_reorder=args.latent_reorder,
+                cls_encoder=cls_encoder,
+                cls_sae_path=args.cls_sae_path,
             )
         else:
             scores = evaluate_split(
@@ -766,6 +905,7 @@ def run_mteb_eval(args: argparse.Namespace) -> Dict[str, Any]:
                 cache_dir=cache_dir,
                 force_reencode=args.force_reencode,
                 top_k=eval_top_k,
+                cls_encoder=cls_encoder,
             )
         all_results[slug] = scores
         for name, val in sorted(scores.items()):

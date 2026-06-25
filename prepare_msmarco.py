@@ -482,7 +482,7 @@ def _require_bm25s():
         import Stemmer  # noqa: WPS433
     except ImportError as exc:
         raise ImportError(
-            "BM25 requires: pip install -r requirements.txt"
+            'BM25 requires the data extra: pip install -e ".[data]"'
         ) from exc
     return bm25s, Stemmer
 
@@ -913,19 +913,19 @@ def parse_args() -> argparse.Namespace:
         "--raw-dir",
         type=Path,
         default=Path("./data/raw/msmarco"),
-        help="Raw data dir (default: ./data/raw/msmarco)"),
+        help="Raw data dir (default: ./data/raw/msmarco)",
     )
     parser.add_argument(
         "--processed-dir",
         type=Path,
         default=Path("./data/processed/msmarco"),
-        help="Processed data dir (default: ./data/processed/msmarco)"),
+        help="Processed data dir (default: ./data/processed/msmarco)",
     )
     parser.add_argument(
         "--num-hard-negatives",
         type=int,
         default=32,
-        help="Hard negatives per query (default: 32)"),
+        help="Hard negatives per query (default: 32)",
     )
     parser.add_argument(
         "--hf-hard-negatives-path",
@@ -939,33 +939,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-hf-hard-negatives",
         action="store_true",
-        help="Passage: skip HF, build all with local BM25"),
+        help="Passage: skip HF, build all with local BM25",
     )
     parser.add_argument(
         "--retrieve-k",
         type=int,
         default=1000,
-        help="BM25 retrieve-k, must exceed num-hard-negatives (default: 1000)"),
+        help="BM25 retrieve-k, must exceed num-hard-negatives (default: 1000)",
     )
     parser.add_argument(
         "--skip-download",
         action="store_true",
-        help="Skip download; use existing raw-dir files"),
+        help="Skip download; use existing raw-dir files",
     )
     parser.add_argument(
         "--skip-index",
         action="store_true",
-        help="Skip stage 1: index (corpus/queries/qrels)"),
+        help="Skip stage 1: index (corpus/queries/qrels)",
     )
     parser.add_argument(
         "--skip-pairs",
         action="store_true",
-        help="Skip stage 2: pairs/"),
+        help="Skip stage 2: pairs/",
     )
     parser.add_argument(
         "--skip-hard-negatives",
         action="store_true",
-        help="Skip stage 3: hard negatives"),
+        help="Skip stage 3: hard negatives",
     )
     # Legacy flag aliases
     parser.add_argument(
@@ -982,12 +982,12 @@ def parse_args() -> argparse.Namespace:
         "--subset",
         choices=("passage", "document", "both"),
         default="both",
-        help="Process passage, document, or both (default: both)"),
+        help="Process passage, document, or both (default: both)",
     )
     parser.add_argument(
         "-v", "--verbose",
         action="store_true",
-        help="Enable DEBUG logging"),
+        help="Enable DEBUG logging",
     )
     return parser.parse_args()
 

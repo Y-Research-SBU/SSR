@@ -68,13 +68,15 @@ def corpus_fingerprint(
     doc_tokens: int,
     n_latents: int,
     topk: int,
+    cls_sae_path: Path | None = None,
+    cls_topk: int | None = None,
 ) -> dict[str, Any]:
     """Fingerprint for MTEB / JSONL streaming index builds (no pre-materialized bank)."""
     corpus_path = corpus_path.resolve()
     model_path = model_path.resolve()
     c_stat = corpus_path.stat()
     m_stat = model_path.stat()
-    return {
+    fp = {
         "kind": "corpus_jsonl",
         "corpus_path": str(corpus_path),
         "corpus_mtime_ns": int(c_stat.st_mtime_ns),
@@ -86,6 +88,17 @@ def corpus_fingerprint(
         "n_latents": int(n_latents),
         "topk": int(topk),
     }
+    if cls_sae_path is not None:
+        cls_path = cls_sae_path.resolve()
+        cls_stat = cls_path.stat()
+        fp.update(
+            {
+                "cls_sae_path": str(cls_path),
+                "cls_sae_mtime_ns": int(cls_stat.st_mtime_ns),
+                "cls_topk": int(cls_topk) if cls_topk is not None else None,
+            }
+        )
+    return fp
 
 
 def bank_fingerprint(bank_dir: Path) -> dict[str, Any]:

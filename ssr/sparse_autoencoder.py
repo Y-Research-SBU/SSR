@@ -167,6 +167,8 @@ class SparseAutoencoder(Module):
         "auxk",
         "normalize",
         "dead_threshold",
+        "token_scope",
+        "cls_token_id",
     ]
 
     def __init__(
@@ -177,14 +179,20 @@ class SparseAutoencoder(Module):
         auxk: int = 512,
         normalize: bool = False,
         dead_threshold: int = 30,
+        token_scope: str = "all",
+        cls_token_id: int | None = None,
     ) -> None:
         super().__init__()
+        if token_scope not in {"all", "non-cls", "cls"}:
+            raise ValueError("token_scope must be one of: all, non-cls, cls")
         self.in_features = in_features
         self.n_latents = n_latents or in_features * 4
         self.topk = topk
         self.auxk = auxk
         self.normalize = normalize
         self.dead_threshold = dead_threshold
+        self.token_scope = token_scope
+        self.cls_token_id = cls_token_id
 
         self.sae = SparseAutoencoderCore(
             n_inputs=in_features,
@@ -206,6 +214,7 @@ class SparseAutoencoder(Module):
     def forward(self, features: dict[str, Tensor]) -> dict[str, Tensor]:
         token_embeddings = features["token_embeddings"]
         attention_mask = features.get("attention_mask")
+        input_ids = features.get("input_ids")
 
         batch_size, seq_len, hidden = token_embeddings.shape
         flat = token_embeddings.reshape(batch_size * seq_len, hidden)
@@ -216,6 +225,25 @@ class SparseAutoencoder(Module):
         else:
             flat_mask = None
             active = flat
+
+        if self.token_scope != "all":
+            if input_ids is not None and self.cls_token_id is not None:
+                cls_mask = input_ids.eq(int(self.cls_token_id))
+            else:
+                cls_mask = torch.zeros(
+                    batch_size,
+                    seq_len,
+                    dtype=torch.bool,
+                    device=token_embeddings.device,
+                )
+                cls_mask[:, 0] = True
+            if attention_mask is not None:
+                cls_mask = cls_mask & attention_mask.bool()
+            scope_mask = cls_mask if self.token_scope == "cls" else ~cls_mask
+            if attention_mask is not None:
+                scope_mask = scope_mask & attention_mask.bool()
+            flat_mask = scope_mask.reshape(batch_size * seq_len)
+            active = flat[flat_mask]
 
         if active.numel() == 0:
             features["token_embeddings"] = token_embeddings.new_zeros(
@@ -251,6 +279,8 @@ class SparseAutoencoder(Module):
             "auxk": self.auxk,
             "normalize": self.normalize,
             "dead_threshold": self.dead_threshold,
+            "token_scope": self.token_scope,
+            "cls_token_id": self.cls_token_id,
         }
 
     def save(self, output_path: str, safe_serialization: bool = True, **kwargs) -> None:

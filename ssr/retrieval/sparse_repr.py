@@ -131,6 +131,47 @@ def batch_dense_to_sparse(
     ]
 
 
+def append_cls_sparse_rows(
+    token_embeddings: Sequence[SparseTokenEmbeddings],
+    cls_embeddings: Sequence[SparseTokenEmbeddings],
+) -> List[SparseTokenEmbeddings]:
+    """Append one offset CLS sparse row to each token-level sparse embedding.
+
+    The CLS SAE has its own latent space, so its latent ids are shifted by the
+    token SAE dimension. This lets MaxSim score token-token and CLS-CLS matches
+    without accidental token-CLS collisions.
+    """
+    if len(token_embeddings) != len(cls_embeddings):
+        raise ValueError(
+            f"token/CLS batch size mismatch: {len(token_embeddings)} != {len(cls_embeddings)}"
+        )
+    out: List[SparseTokenEmbeddings] = []
+    for tok, cls in zip(token_embeddings, cls_embeddings):
+        if cls.n_tokens != 1:
+            raise ValueError(f"Expected one CLS sparse row, got {cls.n_tokens}")
+        width = max(tok.k, cls.k)
+        indices = np.full((tok.n_tokens + 1, width), -1, dtype=np.int32)
+        values = np.zeros((tok.n_tokens + 1, width), dtype=np.float32)
+        if tok.n_tokens > 0 and tok.k > 0:
+            indices[: tok.n_tokens, : tok.k] = tok.indices.astype(np.int32, copy=False)
+            values[: tok.n_tokens, : tok.k] = tok.values.astype(np.float32, copy=False)
+        if cls.k > 0:
+            cls_idx = cls.indices[0].astype(np.int32, copy=False)
+            valid = cls_idx >= 0
+            shifted = cls_idx.copy()
+            shifted[valid] += int(tok.n_latents)
+            indices[tok.n_tokens, : cls.k] = shifted
+            values[tok.n_tokens, : cls.k] = cls.values[0].astype(np.float32, copy=False)
+        out.append(
+            SparseTokenEmbeddings(
+                indices=indices,
+                values=values,
+                n_latents=int(tok.n_latents) + int(cls.n_latents),
+            )
+        )
+    return out
+
+
 def sparse_to_coo_tensor(
     sparse: SparseTokenEmbeddings,
     *,

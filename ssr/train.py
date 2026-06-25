@@ -98,6 +98,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Apply layer norm to SAE inputs (CSR normalize flag).",
     )
+    parser.add_argument(
+        "--sae-token-scope",
+        choices=("all", "non-cls", "cls"),
+        default="non-cls",
+        help=(
+            "Which encoder token embeddings train the SAE: non-cls (default), "
+            "cls ([CLS] only), or all."
+        ),
+    )
 
     # Loss weights — exactly four terms; coef=0 skips that term at train time.
     parser.add_argument(
@@ -352,6 +361,7 @@ def main(args: argparse.Namespace) -> None:
         auxk=args.auxk,
         normalize=args.normalize_input,
         dead_threshold=args.dead_threshold,
+        token_scope=args.sae_token_scope,
         device=device,
     )
     if initial_topk is not None and initial_topk != args.topk:
@@ -383,6 +393,7 @@ def main(args: argparse.Namespace) -> None:
         loss_weights.ucl,
         loss_weights.maxsim,
     )
+    logger.info("SAE token scope: %s", args.sae_token_scope)
 
     train_dataset, eval_dataset = load_datasets(args, sample_format)
     text_columns = ["query", "positive"]
