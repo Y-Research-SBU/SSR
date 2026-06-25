@@ -12,7 +12,7 @@
 <a href="https://veritas2024.github.io/" target="_blank"> Lixuan Guo</b><sup>*1,2</sup>,
 <a href="https://yifeiwang77.com/" target="_blank"><b>Yifei Wang</b></a><sup>*3</sup>,
 <a href="https://neilwen987.github.io/" target="_blank"><b>Tiansheng Wen</b></a><sup>4,1</sup>,
-<a href="https://scholar.google.com/citations?user=hFhhrmgAAAAJ&hl=en"><b>Aosong Feng</b></a><sup>5</sup>,</br>
+<a href="https://scholar.google.com/citations?user=hFhhrmgAAAAJ&hl=en"><b>Aosong Feng</b></a><sup>5</sup>,
 <a href="https://people.csail.mit.edu/stefje/" target="_blank"><b>Stefanie Jegelka</b></a><sup>6,7</sup>,
 <a href="https://chenyuyou.me/" target="_blank"><b>Chenyu You</b></a><sup>1</sup>
 </p>
@@ -44,10 +44,6 @@
 
 <br>
 <br>
-
-<p style="font-size: 15px; color: #444;">
-This is the <b>official repository</b> for <b>SSR</b>. 
-</p>
 
 </div>
 
@@ -87,7 +83,7 @@ For MTEB/BEIR evaluation data:
 python prepare_mteb_eval.py --datasets nfcorpus scifact hotpotqa
 ```
 
-This writes one directory per dataset under `data/processed/mteb/`, each with `corpus.jsonl`, `queries/{split}.tsv`, and `qrels/{split}.tsv`.
+This writes one directory per dataset under `data/processed/mteb/`, each with `corpus.jsonl`, `queries/{split}.tsv`, and `qrels/{split}.tsv`. More details are available in `docs`.
 
 ## Training
 
@@ -111,7 +107,7 @@ python -m ssr.train \
   --output-dir output/ssr-cls
 ```
 
-The resulting token SAE checkpoint is used as `--model-path`; the `[CLS]` SAE checkpoint is passed to evaluation with `--cls-sae-path`.
+The resulting token SAE checkpoint is used as `--model-path`; the `[CLS]` SAE checkpoint is passed to evaluation with `--cls-sae-path`. More details are available in `docs`.
 
 ## Evaluation
 
@@ -169,9 +165,9 @@ python -m ssr.retrieval.eval_mteb \
   --index-accum-device hybrid
 ```
 
-MS MARCO-style dataset slugs default to `MRR@10`; other retrieval datasets default to `nDCG@10`.
+MS MARCO-style dataset slugs default to `MRR@10`; other retrieval datasets default to `nDCG@10`. More details are available in `docs`.
 
-# Citing this paper
+## Citing this paper
 
 If you find this work useful, please cite the accompanying paper:
 
