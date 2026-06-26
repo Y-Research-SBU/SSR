@@ -343,6 +343,46 @@ pre {
     width: 100%; 
 }
 
+.overview-split {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    margin: 22px 0;
+    --text-ratio: 4;
+    --figure-ratio: 6;
+    --image-scale: 1;
+}
+
+.overview-split-text {
+    flex: var(--text-ratio) 1 0;
+}
+
+.overview-split-figure {
+    flex: var(--figure-ratio) 1 0;
+}
+
+.overview-split-text p {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.overview-split-figure img {
+    display: block;
+    width: calc(100% * var(--image-scale));
+    max-width: none;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+@media only screen and (max-width: 760px) {
+    .overview-split {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 14px;
+        --image-scale: 1;
+    }
+}
+
 .image-grid-three {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -452,7 +492,7 @@ blockquote {
            </div>
         </div>
         <div class="figure" style="width: 60%; margin: 0 auto;">
-            <img src="assets/compare-dense.png" alt="PDF Image">
+            <img src="assets/compareDense.svg" alt="PDF Image">
         </div>
     </div>
     <section id="news">
@@ -490,28 +530,34 @@ blockquote {
             </blockquote>
         </p>
 
-        <p>
-            To answer this question, we introduce <b style="color: #0E710E;">Single-stage Sparse Retrieval (SSR)</b>, 
-            a new sparse multi-vector retrieval paradigm that removes the clustering bottleneck entirely. Instead of compressing 
-            token embeddings into low-dimensional dense codes, SSR projects them into a high-dimensional but highly sparse space 
-            using <b>Sparse Autoencoders (SAEs)</b>. Each activated sparse dimension naturally acts as a semantic “pseudo-token,” 
-            allowing SSR to build neuron-level inverted lists and compute late-interaction scores only over overlapping activated neurons.
-        </p>
-
-        <div class="figure" style="width: 40%; margin: 0 auto;">
-            <img src="assets/overview-1.svg" alt="Trade-off comparison between retrieval paradigms">
+        <div class="overview-split" style="--text-ratio: 4; --figure-ratio: 6; --image-scale: 0.6;">
+            <div class="overview-split-text">
+                <p>
+                    To answer this question, we introduce <b style="color: #0E710E;">Single-stage Sparse Retrieval (SSR)</b>, 
+                    a new sparse multi-vector retrieval paradigm that removes the clustering bottleneck entirely. Instead of compressing 
+                    token embeddings into low-dimensional dense codes, SSR projects them into a high-dimensional but highly sparse space 
+                    using <b>Sparse Autoencoders (SAEs)</b>. Each activated sparse dimension naturally acts as a semantic “pseudo-token,” 
+                    allowing SSR to build neuron-level inverted lists and compute late-interaction scores only over overlapping activated neurons.
+                </p>
+            </div>
+            <div class="overview-split-figure">
+                <img src="assets/overview-1.svg" alt="Trade-off comparison between retrieval paradigms">
+            </div>
         </div>
 
-        <p>
-            In essence, SSR turns dense token interaction into sparse overlap matching. This enables a single-stage retrieval 
-            pipeline: document tokens are inserted into inverted lists according to their activated neurons, and query tokens 
-            retrieve candidates by traversing only a small number of corresponding posting lists. To further improve latency, 
-            SSR++ adopts a coarse-to-fine sparse pruning strategy, first using the strongest active neurons for fast candidate 
-            generation and then refining the final ranking with the full sparse late-interaction score.
-        </p>
-
-        <div class="figure" style="width: 45%; margin: 0 auto;">
-            <img src="assets/overview-2.svg" alt="Retrieval performance and efficiency comparison across MVR models">
+        <div class="overview-split" style="--text-ratio: 4; --figure-ratio: 6; --image-scale: 0.9;">
+            <div class="overview-split-figure">
+                <img src="assets/overview-2.svg" alt="Retrieval performance and efficiency comparison across MVR models">
+            </div>
+            <div class="overview-split-text">
+                <p>
+                    In essence, SSR turns dense token interaction into sparse overlap matching. This enables a single-stage retrieval 
+                    pipeline: document tokens are inserted into inverted lists according to their activated neurons, and query tokens 
+                    retrieve candidates by traversing only a small number of corresponding posting lists. To further improve latency, 
+                    SSR++ adopts a coarse-to-fine sparse pruning strategy, first using the strongest active neurons for fast candidate 
+                    generation and then refining the final ranking with the full sparse late-interaction score.
+                </p>
+            </div>
         </div>
 
         <p>
