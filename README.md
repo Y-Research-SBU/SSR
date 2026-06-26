@@ -23,9 +23,9 @@
 <sup>3</sup>Amazon AGI SF Lab &emsp; 
 <br>
 <sup>4</sup>Georgia Tech &emsp;
-<sup>4</sup>5Yale University &emsp;
-<sup>5</sup>TUM &emsp;
-<sup>6</sup>MIT
+<sup>4</sup>Yale University &emsp;
+<sup>6</sup>TUM &emsp;
+<sup>7</sup>MIT
 </p>
 
 <p>
